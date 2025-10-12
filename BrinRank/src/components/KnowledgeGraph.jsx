@@ -7,6 +7,13 @@ const KnowledgeGraph = ({ graphData, shortestPath }) => {
   const [hoveredNode, setHoveredNode] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
+  console.log('KnowledgeGraph component rendered with:', {
+    graphData,
+    hasNodes: graphData?.nodes?.length,
+    hasEdges: graphData?.edges?.length,
+    shortestPath
+  });
+
   useEffect(() => {
     const updateDimensions = () => {
       setDimensions({
@@ -22,18 +29,22 @@ const KnowledgeGraph = ({ graphData, shortestPath }) => {
 
   useEffect(() => {
     if (fgRef.current && graphData) {
+      console.log('Zooming to fit graph');
       // Zoom to fit
       fgRef.current.zoomToFit(400);
     }
   }, [graphData]);
 
   if (!graphData || graphData.nodes.length === 0) {
+    console.log('KnowledgeGraph: No data, showing placeholder');
     return (
       <div className="graph-placeholder">
         <p>Search for a research paper to generate the knowledge graph</p>
       </div>
     );
   }
+
+  console.log('KnowledgeGraph: Rendering graph with', graphData.nodes.length, 'nodes');
 
   // Create a set of node IDs in the shortest path for highlighting
   const shortestPathIds = new Set(

@@ -1,10 +1,9 @@
-import { extractRequirements, extractSubRequirements } from '../services/geminiService';
+import { extractRequirements, extractFullConceptHierarchy } from '../services/geminiService';
 
 export class KnowledgeGraphBuilder {
   constructor() {
     this.nodes = new Map();
     this.edges = [];
-    this.maxDepth = 3; // Limit recursion depth
     this.processedConcepts = new Set();
   }
 
@@ -26,14 +25,12 @@ export class KnowledgeGraphBuilder {
     };
     this.nodes.set(rootNode.id, rootNode);
 
-    // Extract top-level requirements
-    console.log('Extracting requirements for paper...');
-    const topLevelConcepts = await extractRequirements(paperTitle, paperAbstract);
+    // Extract FULL concept hierarchy in ONE API call
+    console.log('Extracting full concept hierarchy for paper...');
+    const conceptHierarchy = await extractFullConceptHierarchy(paperTitle, paperAbstract);
 
-    // Process each top-level concept recursively
-    for (const concept of topLevelConcepts) {
-      await this.processConceptRecursively(concept, 'paper-root', 1);
-    }
+    // Build graph from the hierarchy structure
+    this.buildGraphFromHierarchy(conceptHierarchy, 'paper-root');
 
     return {
       nodes: Array.from(this.nodes.values()),
@@ -41,67 +38,57 @@ export class KnowledgeGraphBuilder {
     };
   }
 
-  async processConceptRecursively(concept, parentId, depth) {
-    // Stop if we've reached max depth
-    if (depth > this.maxDepth) {
-      return;
-    }
+  buildGraphFromHierarchy(hierarchy, parentId, depth = 1) {
+    if (!hierarchy || !hierarchy.concepts) return;
 
-    // Create unique ID for this concept
-    const conceptId = this.generateConceptId(concept.name, depth);
+    for (const concept of hierarchy.concepts) {
+      // Create unique ID for this concept
+      const conceptId = this.generateConceptId(concept.name, depth);
 
-    // Skip if we've already processed this concept
-    if (this.processedConcepts.has(concept.name.toLowerCase())) {
-      // Still create edge to existing node
-      const existingNodeId = this.findNodeIdByName(concept.name);
-      if (existingNodeId && existingNodeId !== conceptId) {
-        this.edges.push({
-          source: parentId,
-          target: existingNodeId,
-          type: 'requires',
-        });
+      // Skip if we've already processed this concept
+      if (this.processedConcepts.has(concept.name.toLowerCase())) {
+        // Still create edge to existing node
+        const existingNodeId = this.findNodeIdByName(concept.name);
+        if (existingNodeId && existingNodeId !== conceptId) {
+          this.edges.push({
+            source: parentId,
+            target: existingNodeId,
+            type: 'requires',
+          });
+        }
+        continue;
       }
-      return;
-    }
 
-    this.processedConcepts.add(concept.name.toLowerCase());
+      this.processedConcepts.add(concept.name.toLowerCase());
 
-    // Create node for this concept
-    const node = {
-      id: conceptId,
-      name: concept.name,
-      type: 'concept',
-      difficulty: concept.difficulty || 'undergraduate',
-      description: concept.description || '',
-      estimatedStudyHours: concept.estimatedStudyHours || 10,
-      level: depth,
-      isFoundational: concept.isFoundational || false,
-    };
-    this.nodes.set(conceptId, node);
+      // Create node for this concept
+      const node = {
+        id: conceptId,
+        name: concept.name,
+        type: 'concept',
+        difficulty: concept.difficulty || 'undergraduate',
+        description: concept.description || '',
+        estimatedStudyHours: concept.estimatedStudyHours || 10,
+        level: depth,
+        isFoundational: concept.isFoundational || false,
+      };
+      this.nodes.set(conceptId, node);
 
-    // Create edge from parent to this node
-    this.edges.push({
-      source: parentId,
-      target: conceptId,
-      type: 'requires',
-    });
+      // Create edge from parent to this node
+      this.edges.push({
+        source: parentId,
+        target: conceptId,
+        type: 'requires',
+      });
 
-    // If this is foundational, don't recurse further
-    if (concept.isFoundational) {
-      return;
-    }
-
-    // Extract prerequisites for this concept
-    try {
-      console.log(`Extracting prerequisites for: ${concept.name} (depth ${depth})`);
-      const prerequisites = await extractSubRequirements(concept.name, concept.description);
-
-      // Process each prerequisite recursively
-      for (const prereq of prerequisites) {
-        await this.processConceptRecursively(prereq, conceptId, depth + 1);
+      // Process prerequisites recursively (but no API calls!)
+      if (concept.prerequisites && concept.prerequisites.length > 0) {
+        this.buildGraphFromHierarchy(
+          { concepts: concept.prerequisites },
+          conceptId,
+          depth + 1
+        );
       }
-    } catch (error) {
-      console.error(`Error processing concept ${concept.name}:`, error);
     }
   }
 

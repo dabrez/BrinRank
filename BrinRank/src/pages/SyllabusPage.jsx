@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { searchArxivPaper } from '../services/arxivService';
 import { buildKnowledgeGraph } from '../utils/knowledgeGraphBuilder';
 import { generateSyllabus } from '../services/geminiService';
-import { getTopologicalOrder } from '../utils/pathFinder';
+import { getTopologicalOrder, findShortestLearningPath } from '../utils/pathFinder';
+import KnowledgeGraph from '../components/KnowledgeGraph';
 import './SyllabusPage.css';
 
 const SyllabusPage = () => {
@@ -11,6 +12,7 @@ const SyllabusPage = () => {
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [syllabus, setSyllabus] = useState('');
   const [knowledgeGraph, setKnowledgeGraph] = useState(null);
+  const [shortestPath, setShortestPath] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
@@ -22,7 +24,22 @@ const SyllabusPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const results = await searchArxivPaper(searchQuery);
+      // Check if the query is an arXiv URL and extract the ID
+      const arxivUrlPattern = /arxiv\.org\/abs\/([0-9.]+)/i;
+      const match = searchQuery.match(arxivUrlPattern);
+
+      let results;
+      if (match) {
+        // If it's an arXiv URL, fetch the specific paper by ID
+        console.log('Detected arXiv URL, extracting ID:', match[1]);
+        const { getArxivPaperById } = await import('../services/arxivService');
+        const paper = await getArxivPaperById(match[1]);
+        results = [paper];
+      } else {
+        // Otherwise, perform a regular search
+        results = await searchArxivPaper(searchQuery);
+      }
+
       setPapers(results);
     } catch (err) {
       setError('Failed to search papers. Please try again.');
@@ -40,14 +57,30 @@ const SyllabusPage = () => {
     try {
       console.log('Building knowledge graph for syllabus...');
       const graph = await buildKnowledgeGraph(paper.title, paper.summary);
+      console.log('Knowledge graph built:', graph);
+      console.log('Graph nodes:', graph?.nodes?.length);
+      console.log('Graph edges:', graph?.edges?.length);
       setKnowledgeGraph(graph);
+
+      console.log('Finding shortest learning path...');
+      const path = findShortestLearningPath(graph);
+      console.log('Shortest path found:', path);
+      setShortestPath(path);
 
       console.log('Generating syllabus...');
       const syllabusText = await generateSyllabus(paper.title, graph);
+      console.log('Syllabus generated, length:', syllabusText?.length);
       setSyllabus(syllabusText);
+
+      console.log('Final state check:');
+      console.log('- selectedPaper:', paper.title);
+      console.log('- knowledgeGraph set:', !!graph);
+      console.log('- syllabus set:', !!syllabusText);
+      console.log('- generating:', false);
     } catch (err) {
       setError('Failed to generate syllabus. Please try again.');
-      console.error(err);
+      console.error('Error during syllabus generation:', err);
+      console.error('Error stack:', err.stack);
     } finally {
       setGenerating(false);
     }
@@ -169,6 +202,17 @@ const SyllabusPage = () => {
         </div>
       )}
 
+      {(() => {
+        console.log('Render check:', {
+          selectedPaper: !!selectedPaper,
+          syllabus: !!syllabus,
+          generating,
+          knowledgeGraph: !!knowledgeGraph,
+          shouldRenderSyllabus: selectedPaper && syllabus && !generating
+        });
+        return null;
+      })()}
+
       {selectedPaper && syllabus && !generating && (
         <div className="syllabus-section">
           <div className="syllabus-header">
@@ -185,6 +229,7 @@ const SyllabusPage = () => {
                   setSelectedPaper(null);
                   setSyllabus('');
                   setKnowledgeGraph(null);
+                  setShortestPath(null);
                 }}
                 className="back-button"
               >
@@ -193,28 +238,44 @@ const SyllabusPage = () => {
             </div>
           </div>
 
+          {(() => {
+            console.log('Knowledge graph check for rendering:', {
+              knowledgeGraph: !!knowledgeGraph,
+              nodes: knowledgeGraph?.nodes?.length,
+              edges: knowledgeGraph?.edges?.length
+            });
+            return null;
+          })()}
+
           {knowledgeGraph && (
-            <div className="prerequisites-summary">
-              <h3>Prerequisites Overview</h3>
-              <div className="summary-stats">
-                <div className="summary-stat">
-                  <span className="stat-number">{knowledgeGraph.nodes.length - 1}</span>
-                  <span className="stat-label">Concepts</span>
-                </div>
-                <div className="summary-stat">
-                  <span className="stat-number">
-                    {getTopologicalOrder(knowledgeGraph).filter(n => n.isFoundational).length}
-                  </span>
-                  <span className="stat-label">Foundational</span>
-                </div>
-                <div className="summary-stat">
-                  <span className="stat-number">
-                    {knowledgeGraph.nodes.reduce((sum, n) => sum + (n.estimatedStudyHours || 0), 0)}h
-                  </span>
-                  <span className="stat-label">Total Time</span>
+            <>
+              <div className="prerequisites-summary">
+                <h3>Prerequisites Overview</h3>
+                <div className="summary-stats">
+                  <div className="summary-stat">
+                    <span className="stat-number">{knowledgeGraph.nodes.length - 1}</span>
+                    <span className="stat-label">Concepts</span>
+                  </div>
+                  <div className="summary-stat">
+                    <span className="stat-number">
+                      {getTopologicalOrder(knowledgeGraph).filter(n => n.isFoundational).length}
+                    </span>
+                    <span className="stat-label">Foundational</span>
+                  </div>
+                  <div className="summary-stat">
+                    <span className="stat-number">
+                      {knowledgeGraph.nodes.reduce((sum, n) => sum + (n.estimatedStudyHours || 0), 0)}h
+                    </span>
+                    <span className="stat-label">Total Time</span>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              <KnowledgeGraph
+                graphData={knowledgeGraph}
+                shortestPath={shortestPath}
+              />
+            </>
           )}
 
           <div className="syllabus-content">
