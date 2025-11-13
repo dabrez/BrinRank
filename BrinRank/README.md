@@ -5,7 +5,7 @@
 ## Features
 
 ### 1. Interactive Knowledge Graph
-- Visualizes prerequisite concepts recursively using ArXiv and Gemini APIs
+- Visualizes prerequisite concepts recursively using ArXiv API and local LLM (Ollama)
 - Color-coded nodes by difficulty level (foundational, undergraduate, graduate, advanced)
 - Highlights the shortest learning path from foundational concepts to the research paper
 - Interactive hover tooltips with concept details
@@ -26,7 +26,7 @@
 
 - **React 18** - Frontend framework
 - **Vite** - Build tool and dev server
-- **Google Gemini API** - AI-powered prerequisite extraction and syllabus generation
+- **Ollama** - Local LLM backend for prerequisite extraction and syllabus generation
 - **ArXiv API** - Research paper search and metadata
 - **React Force Graph** - Interactive graph visualization
 - **React Router** - Client-side routing
@@ -36,7 +36,8 @@
 ### Prerequisites
 
 - Node.js 16+ installed
-- Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+- Ollama installed and running ([Install Ollama](https://ollama.ai))
+- A compatible model pulled (e.g., `ollama pull llama3.2`)
 
 ### Installation
 
@@ -50,17 +51,32 @@ cd BrinRank
 npm install
 ```
 
-3. Your `.env` file should already contain your Gemini API key:
-```
-VITE_GEMINI_API_KEY=your_api_key_here
+3. Create a `.env` file (copy from `.env.example`):
+```bash
+cp .env.example .env
 ```
 
-4. Start the development server:
+Configure Ollama settings if needed:
+```
+VITE_OLLAMA_HOST=http://localhost:11434
+VITE_OLLAMA_MODEL=llama3.2
+```
+
+4. Ensure Ollama is running with a model:
+```bash
+# Pull a model if you haven't already
+ollama pull llama3.2
+
+# Verify Ollama is running
+curl http://localhost:11434/api/tags
+```
+
+5. Start the development server:
 ```bash
 npm run dev
 ```
 
-5. Open your browser and navigate to `http://localhost:3000`
+6. Open your browser and navigate to `http://localhost:3000`
 
 ## Usage
 
@@ -86,7 +102,7 @@ npm run dev
 
 ### Recursive Knowledge Extraction
 
-1. **Paper Analysis**: Gemini analyzes the paper's title and abstract to identify top-level prerequisite concepts
+1. **Paper Analysis**: Local LLM (via Ollama) analyzes the paper's title and abstract to identify top-level prerequisite concepts
 2. **Recursive Breakdown**: For each concept, the system recursively extracts prerequisites until reaching foundational concepts
 3. **Graph Construction**: Builds a directed acyclic graph (DAG) with concepts as nodes and dependencies as edges
 4. **Path Optimization**: Applies Dijkstra's algorithm to find the shortest learning path weighted by estimated study hours
@@ -110,7 +126,7 @@ src/
 
 ## API Limitations
 
-- **Gemini API**: Rate limited based on your API key tier
+- **Ollama**: Performance depends on your hardware and the model size (llama3.2 recommended for balance)
 - **ArXiv API**: Public API with fair use policy (max 1 request per 3 seconds recommended)
 
 ## Troubleshooting
@@ -128,12 +144,13 @@ If you encounter this error:
 - Check the browser console for detailed error messages
 - Verify the proxy is configured correctly in `vite.config.js`
 
-### Gemini API Errors
+### Ollama Connection Errors
 
-If you see errors related to the Gemini API:
-- Verify your API key in `.env` is correct
-- Check your API quota at https://makersuite.google.com
-- Ensure your key has access to the `gemini-pro` model
+If you see errors related to Ollama:
+- Verify Ollama is running: `curl http://localhost:11434/api/tags`
+- Check that you have pulled the model: `ollama list`
+- Ensure the model name in `.env` matches an installed model
+- Try pulling the default model: `ollama pull llama3.2`
 
 ### Dev Server Won't Start
 
@@ -165,5 +182,5 @@ MIT License - feel free to use this project for educational purposes.
 ## Acknowledgments
 
 - ArXiv for providing open access to research papers
-- Google Gemini for powerful AI capabilities
+- Ollama for making local LLMs accessible and easy to use
 - The open-source community for the amazing libraries used in this project
