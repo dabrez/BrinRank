@@ -1,14 +1,40 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// Ollama API configuration
+const OLLAMA_HOST = import.meta.env.VITE_OLLAMA_HOST || 'http://localhost:11434';
+const OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2';
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+// Helper function to call Ollama API
+const callOllama = async (prompt) => {
+  try {
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: prompt,
+        stream: false,
+        format: 'json',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.response;
+  } catch (error) {
+    console.error('Error calling Ollama:', error);
+    throw error;
+  }
+};
 
 export const extractRequirements = async (paperTitle, paperAbstract) => {
   try {
-    console.log('Gemini API: Extracting requirements for paper:', paperTitle);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    console.log('Ollama API: Extracting requirements for paper:', paperTitle);
 
-    const prompt = `
-You are an expert at analyzing academic research papers and identifying prerequisite knowledge.
+    const prompt = `You are an expert at analyzing academic research papers and identifying prerequisite knowledge.
 
 Given the following research paper:
 Title: ${paperTitle}
@@ -29,32 +55,19 @@ Return your response as a JSON object with the following structure:
 }
 
 Focus on fundamental concepts that would be prerequisites, not the advanced concepts introduced in the paper itself. Include mathematical foundations, domain knowledge, and methodological understanding needed.
-`;
 
-    console.log('Gemini API: Sending request...');
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    console.log('Gemini API: Received response, length:', text.length);
+IMPORTANT: Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
-    // Extract JSON from markdown code blocks if present
-    let jsonText = text;
-    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[1];
-    } else {
-      const codeMatch = text.match(/```\n?([\s\S]*?)\n?```/);
-      if (codeMatch) {
-        jsonText = codeMatch[1];
-      }
-    }
+    console.log('Ollama API: Sending request...');
+    const text = await callOllama(prompt);
+    console.log('Ollama API: Received response, length:', text.length);
 
-    console.log('Gemini API: Parsing JSON...');
-    const data = JSON.parse(jsonText.trim());
-    console.log('Gemini API: Extracted', data.concepts?.length, 'concepts');
+    console.log('Ollama API: Parsing JSON...');
+    const data = JSON.parse(text.trim());
+    console.log('Ollama API: Extracted', data.concepts?.length, 'concepts');
     return data.concepts || [];
   } catch (error) {
-    console.error('Error extracting requirements with Gemini:', error);
+    console.error('Error extracting requirements with Ollama:', error);
     console.error('Error details:', {
       message: error.message,
       name: error.name,
@@ -66,10 +79,7 @@ Focus on fundamental concepts that would be prerequisites, not the advanced conc
 
 export const extractSubRequirements = async (conceptName, conceptDescription) => {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    const prompt = `
-You are an expert at breaking down complex concepts into prerequisite knowledge.
+    const prompt = `You are an expert at breaking down complex concepts into prerequisite knowledge.
 
 Given the concept:
 Name: ${conceptName}
@@ -92,28 +102,14 @@ Return your response as a JSON object with the following structure:
 
 Mark "isFoundational" as true if this is a basic concept that doesn't need further breakdown (like basic algebra, calculus, etc.).
 If the concept is already foundational, return an empty prerequisites array.
-`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+IMPORTANT: Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
-    // Extract JSON from markdown code blocks if present
-    let jsonText = text;
-    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[1];
-    } else {
-      const codeMatch = text.match(/```\n?([\s\S]*?)\n?```/);
-      if (codeMatch) {
-        jsonText = codeMatch[1];
-      }
-    }
-
-    const data = JSON.parse(jsonText.trim());
+    const text = await callOllama(prompt);
+    const data = JSON.parse(text.trim());
     return data.prerequisites || [];
   } catch (error) {
-    console.error('Error extracting sub-requirements with Gemini:', error);
+    console.error('Error extracting sub-requirements with Ollama:', error);
     throw error;
   }
 };
@@ -121,11 +117,9 @@ If the concept is already foundational, return an empty prerequisites array.
 // NEW OPTIMIZED FUNCTION: Extract full concept hierarchy in ONE API call
 export const extractFullConceptHierarchy = async (paperTitle, paperAbstract) => {
   try {
-    console.log('Gemini API: Extracting FULL concept hierarchy for paper:', paperTitle);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    console.log('Ollama API: Extracting FULL concept hierarchy for paper:', paperTitle);
 
-    const prompt = `
-You are an expert at analyzing academic research papers and creating comprehensive prerequisite knowledge maps.
+    const prompt = `You are an expert at analyzing academic research papers and creating comprehensive prerequisite knowledge maps.
 
 Given the following research paper:
 Title: ${paperTitle}
@@ -173,32 +167,19 @@ Return your response as a JSON object with this NESTED structure:
 }
 
 Keep the graph focused and conceptual. Prioritize breadth of important topics over depth of minor details.
-`;
 
-    console.log('Gemini API: Sending request for full hierarchy...');
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    console.log('Gemini API: Received hierarchy response, length:', text.length);
+IMPORTANT: Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
-    // Extract JSON from markdown code blocks if present
-    let jsonText = text;
-    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[1];
-    } else {
-      const codeMatch = text.match(/```\n?([\s\S]*?)\n?```/);
-      if (codeMatch) {
-        jsonText = codeMatch[1];
-      }
-    }
+    console.log('Ollama API: Sending request for full hierarchy...');
+    const text = await callOllama(prompt);
+    console.log('Ollama API: Received hierarchy response, length:', text.length);
 
-    console.log('Gemini API: Parsing hierarchy JSON...');
-    const data = JSON.parse(jsonText.trim());
-    console.log('Gemini API: Extracted hierarchy with', data.concepts?.length, 'top-level concepts');
+    console.log('Ollama API: Parsing hierarchy JSON...');
+    const data = JSON.parse(text.trim());
+    console.log('Ollama API: Extracted hierarchy with', data.concepts?.length, 'top-level concepts');
     return data;
   } catch (error) {
-    console.error('Error extracting full concept hierarchy with Gemini:', error);
+    console.error('Error extracting full concept hierarchy with Ollama:', error);
     console.error('Error details:', {
       message: error.message,
       name: error.name,
@@ -210,14 +191,11 @@ Keep the graph focused and conceptual. Prioritize breadth of important topics ov
 
 export const generateSyllabus = async (paperTitle, knowledgeGraph) => {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
     const conceptsList = knowledgeGraph.nodes
       .map(node => `- ${node.name} (${node.difficulty}, ${node.estimatedStudyHours}h)`)
       .join('\n');
 
-    const prompt = `
-You are an expert educator designing a comprehensive learning syllabus.
+    const prompt = `You are an expert educator designing a comprehensive learning syllabus.
 
 Create a detailed syllabus to prepare undergraduate students to understand this research paper:
 Title: ${paperTitle}
@@ -233,13 +211,30 @@ Create a structured syllabus with:
 5. Milestones and assessments
 
 Format your response as a detailed markdown document that would be suitable for student onboarding into a research group.
-`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+Return the syllabus in markdown format.`;
+
+    // For syllabus generation, we don't need JSON format
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: prompt,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.response;
   } catch (error) {
-    console.error('Error generating syllabus with Gemini:', error);
+    console.error('Error generating syllabus with Ollama:', error);
     throw error;
   }
 };
